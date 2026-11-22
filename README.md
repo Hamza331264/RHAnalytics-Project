@@ -36,13 +36,14 @@ Le détail pas à pas est dans le [guide du projet](docs/Guide_Projet_HR_Analyti
 
 ## Indicateurs clés
 
-
-Effectif	Nombre total de collaborateurs dans l’entreprise.
-Taux de rotation	Pourcentage de collaborateurs ayant quitté l’entreprise.
-Taux d’absentéisme	Pourcentage d’absences des collaborateurs.
-Délai de recrutement	Durée moyenne nécessaire pour recruter un candidat.
-Coût par embauche	Coût moyen nécessaire pour recruter un nouveau collaborateur.
-Taux de conversion	Pourcentage de candidats passant d’une étape à une autre du processus de recrutement.
+| KPI | Description |
+|---|---|
+| Effectif | Nombre total de collaborateurs dans l’entreprise. |
+| Taux de rotation | Pourcentage de collaborateurs ayant quitté l’entreprise. |
+| Taux d’absentéisme | Pourcentage d’absences des collaborateurs. |
+| Délai de recrutement | Durée moyenne nécessaire pour recruter un candidat. |
+| Coût par embauche | Coût moyen nécessaire pour recruter un nouveau collaborateur. |
+| Taux de conversion | Pourcentage de candidats passant d’une étape à une autre du processus de recrutement. |
 
 Les autres mesures sont décrites dans le guide du projet.
 
