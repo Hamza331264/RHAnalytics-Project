@@ -11,7 +11,7 @@ Entrepôt de données RH sous SQL Server et tableau de bord Power BI pour **Cont
 | Élément | Détail |
 |---|---|
 | Base de données | `HRAnalyticsDW` (SQL Server) |
-| Restitution | Power BI Desktop, 4 pages |
+| Restitution | Power BI Desktop, 3 pages |
 ## Contenu du dépôt
 
 ```text
