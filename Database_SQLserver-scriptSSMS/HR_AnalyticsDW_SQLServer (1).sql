@@ -1,0 +1,408 @@
+/*
+HR ANALYTICS DATA WAREHOUSE - STAR SCHEMA
+SQL Server / T-SQL
+Données 100% fictives pour apprentissage et démonstration.
+Période : 2024-01-01 à 2025-12-31
+Exécution : SQL Server Management Studio (SSMS), puis connexion de Power BI à la base HRAnalyticsDW.
+
+GRAIN (granularité) :
+- FactEmployeeSnapshot : 1 ligne par collaborateur et par mois (photo de fin de mois)
+- FactAbsence : 1 ligne par événement d'absence
+- FactRecruitment : 1 ligne par candidature
+- FactTraining : 1 ligne par participation à une formation
+
+IMPORTANT :
+Les mesures de headcount se calculent depuis FactEmployeeSnapshot en filtrant
+un seul mois/date de snapshot. Ne jamais additionner les effectifs de plusieurs mois.
+*/
+
+IF DB_ID('HRAnalyticsDW') IS NULL
+    CREATE DATABASE HRAnalyticsDW;
+GO
+USE HRAnalyticsDW;
+GO
+
+/* Nettoyage pour permettre de rejouer le script */
+DROP TABLE IF EXISTS dbo.FactTraining;
+DROP TABLE IF EXISTS dbo.FactRecruitment;
+DROP TABLE IF EXISTS dbo.FactAbsence;
+DROP TABLE IF EXISTS dbo.FactEmployeeSnapshot;
+DROP TABLE IF EXISTS dbo.DimRecruitmentSource;
+DROP TABLE IF EXISTS dbo.DimAbsenceType;
+DROP TABLE IF EXISTS dbo.DimJob;
+DROP TABLE IF EXISTS dbo.DimDepartment;
+DROP TABLE IF EXISTS dbo.DimEmployee;
+DROP TABLE IF EXISTS dbo.DimDate;
+GO
+
+/* =========================
+   1. DIMENSIONS
+   ========================= */
+
+CREATE TABLE dbo.DimDate (
+    DateKey       INT          NOT NULL PRIMARY KEY, -- format YYYYMMDD
+    FullDate      DATE         NOT NULL UNIQUE,
+    [Year]        SMALLINT     NOT NULL,
+    [Quarter]     TINYINT      NOT NULL,
+    MonthNumber   TINYINT      NOT NULL,
+    MonthName     NVARCHAR(20) NOT NULL,
+    YearMonth     CHAR(7)      NOT NULL,
+    DayNumber     TINYINT      NOT NULL,
+    DayName       NVARCHAR(20) NOT NULL,
+    IsWeekend     BIT          NOT NULL
+);
+
+CREATE TABLE dbo.DimDepartment (
+    DepartmentKey INT IDENTITY(1,1) PRIMARY KEY,
+    DepartmentCode VARCHAR(10) NOT NULL UNIQUE,
+    DepartmentName NVARCHAR(80) NOT NULL,
+    HRBusinessPartner NVARCHAR(80) NULL
+);
+
+CREATE TABLE dbo.DimJob (
+    JobKey       INT IDENTITY(1,1) PRIMARY KEY,
+    JobTitle     NVARCHAR(100) NOT NULL,
+    JobFamily    NVARCHAR(60) NOT NULL,
+    JobLevel     NVARCHAR(30) NOT NULL
+);
+
+CREATE TABLE dbo.DimEmployee (
+    EmployeeKey  INT IDENTITY(1,1) PRIMARY KEY,
+    EmployeeID   VARCHAR(12) NOT NULL UNIQUE, -- identifiant métier
+    FirstName    NVARCHAR(50) NOT NULL,
+    LastName     NVARCHAR(50) NOT NULL,
+    Gender       NVARCHAR(20) NOT NULL,
+    BirthDate    DATE NULL,
+    HireDate     DATE NOT NULL,
+    ExitDate     DATE NULL,
+    ContractType NVARCHAR(40) NOT NULL,
+    DepartmentKey INT NOT NULL,
+    JobKey        INT NOT NULL,
+    City          NVARCHAR(50) NOT NULL,
+    CONSTRAINT FK_DimEmployee_Department FOREIGN KEY (DepartmentKey)
+        REFERENCES dbo.DimDepartment(DepartmentKey),
+    CONSTRAINT FK_DimEmployee_Job FOREIGN KEY (JobKey)
+        REFERENCES dbo.DimJob(JobKey)
+);
+
+CREATE TABLE dbo.DimAbsenceType (
+    AbsenceTypeKey INT IDENTITY(1,1) PRIMARY KEY,
+    AbsenceTypeName NVARCHAR(60) NOT NULL,
+    AbsenceCategory NVARCHAR(40) NOT NULL
+);
+
+CREATE TABLE dbo.DimRecruitmentSource (
+    RecruitmentSourceKey INT IDENTITY(1,1) PRIMARY KEY,
+    SourceName NVARCHAR(60) NOT NULL,
+    SourceCategory NVARCHAR(40) NOT NULL
+);
+GO
+
+/* =========================
+   2. TABLES DE FAITS
+   ========================= */
+
+CREATE TABLE dbo.FactEmployeeSnapshot (
+    SnapshotKey   BIGINT IDENTITY(1,1) PRIMARY KEY,
+    SnapshotDateKey INT NOT NULL,
+    EmployeeKey   INT NOT NULL,
+    DepartmentKey INT NOT NULL,
+    JobKey        INT NOT NULL,
+    Headcount     TINYINT NOT NULL,
+    MonthlySalary DECIMAL(12,2) NOT NULL,
+    CONSTRAINT UQ_FactSnapshot UNIQUE (SnapshotDateKey, EmployeeKey),
+    CONSTRAINT FK_FES_Date FOREIGN KEY (SnapshotDateKey) REFERENCES dbo.DimDate(DateKey),
+    CONSTRAINT FK_FES_Employee FOREIGN KEY (EmployeeKey) REFERENCES dbo.DimEmployee(EmployeeKey),
+    CONSTRAINT FK_FES_Department FOREIGN KEY (DepartmentKey) REFERENCES dbo.DimDepartment(DepartmentKey),
+    CONSTRAINT FK_FES_Job FOREIGN KEY (JobKey) REFERENCES dbo.DimJob(JobKey)
+);
+
+CREATE TABLE dbo.FactAbsence (
+    AbsenceKey    BIGINT IDENTITY(1,1) PRIMARY KEY,
+    DateKey       INT NOT NULL,
+    EmployeeKey   INT NOT NULL,
+    DepartmentKey INT NOT NULL,
+    AbsenceTypeKey INT NOT NULL,
+    AbsenceDays   DECIMAL(5,2) NOT NULL,
+    WorkingDays   DECIMAL(5,2) NOT NULL,
+    CONSTRAINT FK_FA_Date FOREIGN KEY (DateKey) REFERENCES dbo.DimDate(DateKey),
+    CONSTRAINT FK_FA_Employee FOREIGN KEY (EmployeeKey) REFERENCES dbo.DimEmployee(EmployeeKey),
+    CONSTRAINT FK_FA_Department FOREIGN KEY (DepartmentKey) REFERENCES dbo.DimDepartment(DepartmentKey),
+    CONSTRAINT FK_FA_Type FOREIGN KEY (AbsenceTypeKey) REFERENCES dbo.DimAbsenceType(AbsenceTypeKey)
+);
+
+CREATE TABLE dbo.FactRecruitment (
+    RecruitmentKey BIGINT IDENTITY(1,1) PRIMARY KEY,
+    CandidateID    VARCHAR(15) NOT NULL UNIQUE,
+    OpeningDateKey INT NOT NULL,
+    HiringDateKey  INT NULL,
+    DepartmentKey  INT NOT NULL,
+    JobKey         INT NOT NULL,
+    RecruitmentSourceKey INT NOT NULL,
+    RecruitmentStatus NVARCHAR(30) NOT NULL,
+    RecruitmentCost DECIMAL(12,2) NOT NULL,
+    TimeToHireDays INT NULL,
+    CONSTRAINT FK_FR_OpeningDate FOREIGN KEY (OpeningDateKey) REFERENCES dbo.DimDate(DateKey),
+    CONSTRAINT FK_FR_HiringDate FOREIGN KEY (HiringDateKey) REFERENCES dbo.DimDate(DateKey),
+    CONSTRAINT FK_FR_Department FOREIGN KEY (DepartmentKey) REFERENCES dbo.DimDepartment(DepartmentKey),
+    CONSTRAINT FK_FR_Job FOREIGN KEY (JobKey) REFERENCES dbo.DimJob(JobKey),
+    CONSTRAINT FK_FR_Source FOREIGN KEY (RecruitmentSourceKey) REFERENCES dbo.DimRecruitmentSource(RecruitmentSourceKey)
+);
+
+CREATE TABLE dbo.FactTraining (
+    TrainingKey  BIGINT IDENTITY(1,1) PRIMARY KEY,
+    DateKey      INT NOT NULL,
+    EmployeeKey  INT NOT NULL,
+    DepartmentKey INT NOT NULL,
+    TrainingName NVARCHAR(100) NOT NULL,
+    TrainingHours DECIMAL(6,2) NOT NULL,
+    TrainingCost DECIMAL(12,2) NOT NULL,
+    TrainingMode NVARCHAR(30) NOT NULL,
+    CONSTRAINT FK_FT_Date FOREIGN KEY (DateKey) REFERENCES dbo.DimDate(DateKey),
+    CONSTRAINT FK_FT_Employee FOREIGN KEY (EmployeeKey) REFERENCES dbo.DimEmployee(EmployeeKey),
+    CONSTRAINT FK_FT_Department FOREIGN KEY (DepartmentKey) REFERENCES dbo.DimDepartment(DepartmentKey)
+);
+GO
+
+/* =========================
+   3. ALIMENTATION DES DIMENSIONS
+   ========================= */
+
+;WITH Calendar AS (
+    SELECT CONVERT(date,'2024-01-01') AS d
+    UNION ALL
+    SELECT DATEADD(day,1,d)
+    FROM Calendar
+    WHERE d < '2026-12-31'
+)
+INSERT INTO dbo.DimDate
+(DateKey, FullDate, [Year], [Quarter], MonthNumber, MonthName, YearMonth, DayNumber, DayName, IsWeekend)
+SELECT
+    CONVERT(int,CONVERT(char(8),d,112)),
+    d,
+    YEAR(d),
+    DATEPART(QUARTER,d),
+    MONTH(d),
+    DATENAME(MONTH,d),
+    CONVERT(char(7),d,120),
+    DAY(d),
+    DATENAME(WEEKDAY,d),
+    CASE WHEN DATEPART(WEEKDAY,d) IN (1,7) THEN 1 ELSE 0 END
+FROM Calendar
+OPTION (MAXRECURSION 0);
+
+INSERT INTO dbo.DimDepartment (DepartmentCode, DepartmentName, HRBusinessPartner) VALUES
+('HR','Ressources Humaines','Salma Bennani'),
+('IT','Technologies & SI','Youssef Amrani'),
+('OPS','Opérations','Nadia El Fassi'),
+('FIN','Finance','Karim Alaoui'),
+('MKT','Marketing','Imane Tazi');
+
+INSERT INTO dbo.DimJob (JobTitle, JobFamily, JobLevel) VALUES
+('HR Analyst','Human Resources','Confirmé'),
+('HR Business Partner','Human Resources','Senior'),
+('Data Analyst','Data & BI','Confirmé'),
+('BI Developer','Data & BI','Senior'),
+('Conseiller Client','Operations','Junior'),
+('Team Leader','Operations','Confirmé'),
+('Financial Analyst','Finance','Confirmé'),
+('Marketing Specialist','Marketing','Confirmé');
+
+INSERT INTO dbo.DimAbsenceType (AbsenceTypeName, AbsenceCategory) VALUES
+('Congé annuel','Planifiée'),
+('Maladie','Non planifiée'),
+('Autorisation','Exceptionnelle'),
+('Absence sans solde','Non planifiée');
+
+INSERT INTO dbo.DimRecruitmentSource (SourceName, SourceCategory) VALUES
+('LinkedIn','Digital'),
+('Rekrute','Job board'),
+('Cooptation','Interne'),
+('Site carrière','Entreprise'),
+('Cabinet de recrutement','Externe');
+
+/* 30 collaborateurs fictifs ; salaires non destinés à représenter AXA */
+INSERT INTO dbo.DimEmployee
+(EmployeeID, FirstName, LastName, Gender, BirthDate, HireDate, ExitDate, ContractType, DepartmentKey, JobKey, City)
+VALUES
+('EMP001','Amine','Berrada','Homme','1992-04-12','2021-03-15',NULL,'CDI',2,3,'Rabat'),
+('EMP002','Sara','Idrissi','Femme','1995-08-21','2022-06-01',NULL,'CDI',1,1,'Rabat'),
+('EMP003','Omar','Fassi','Homme','1989-02-10','2020-11-16',NULL,'CDI',3,6,'Salé'),
+('EMP004','Lina','Tazi','Femme','1997-11-05','2023-01-09',NULL,'CDI',2,4,'Rabat'),
+('EMP005','Yassine','Alaoui','Homme','1991-07-19','2021-09-20','2025-04-18','CDI',3,5,'Témara'),
+('EMP006','Meryem','Khalfi','Femme','1994-03-30','2022-02-14',NULL,'CDI',4,7,'Rabat'),
+('EMP007','Hamza','Naciri','Homme','1990-12-01','2019-05-06',NULL,'CDI',3,6,'Rabat'),
+('EMP008','Nour','Amrani','Femme','1998-06-17','2024-02-01',NULL,'CDD',1,1,'Salé'),
+('EMP009','Mehdi','Chraibi','Homme','1993-09-09','2022-10-03',NULL,'CDI',2,3,'Rabat'),
+('EMP010','Aya','Lahlou','Femme','1996-01-24','2023-07-17',NULL,'CDI',5,8,'Rabat'),
+('EMP011','Rania','Bouzid','Femme','1992-05-13','2020-04-06',NULL,'CDI',1,2,'Rabat'),
+('EMP012','Anas','Mansouri','Homme','1995-10-29','2024-05-13',NULL,'CDD',3,5,'Témara'),
+('EMP013','Salim','Tahiri','Homme','1988-08-08','2018-09-03',NULL,'CDI',4,7,'Rabat'),
+('EMP014','Hiba','Ouali','Femme','1999-02-14','2025-01-06',NULL,'CDI',5,8,'Rabat'),
+('EMP015','Bilal','Kettani','Homme','1991-06-22','2021-12-01','2024-11-29','CDI',2,4,'Salé'),
+('EMP016','Ikram','Zerouali','Femme','1994-12-11','2022-03-07',NULL,'CDI',3,5,'Rabat'),
+('EMP017','Adam','Bennis','Homme','1997-04-04','2023-09-11',NULL,'CDI',2,3,'Rabat'),
+('EMP018','Salma','El Gharbi','Femme','1990-01-16','2019-02-18',NULL,'CDI',1,2,'Rabat'),
+('EMP019','Reda','Mouline','Homme','1993-03-03','2024-08-05',NULL,'CDD',3,5,'Témara'),
+('EMP020','Ghita','Rami','Femme','1996-07-27','2022-11-14',NULL,'CDI',4,7,'Rabat'),
+('EMP021','Zakaria','Fikri','Homme','1987-10-10','2017-06-12',NULL,'CDI',2,4,'Rabat'),
+('EMP022','Dounia','Slaoui','Femme','1998-09-18','2025-03-03',NULL,'CDI',1,1,'Salé'),
+('EMP023','Ilyas','Haddad','Homme','1994-02-25','2020-08-24','2025-08-15','CDI',3,6,'Rabat'),
+('EMP024','Maha','Bourqia','Femme','1993-11-30','2021-01-04',NULL,'CDI',5,8,'Rabat'),
+('EMP025','Khalid','Jabri','Homme','1990-05-05','2023-04-10',NULL,'CDI',4,7,'Salé'),
+('EMP026','Nawal','Boukili','Femme','1995-06-06','2024-10-07',NULL,'CDD',3,5,'Rabat'),
+('EMP027','Soufiane','Ait Lahcen','Homme','1992-12-20','2022-01-10',NULL,'CDI',2,3,'Rabat'),
+('EMP028','Mina','Rachidi','Femme','1997-03-14','2023-05-22',NULL,'CDI',1,1,'Témara'),
+('EMP029','Tarik','Ziani','Homme','1989-07-07','2019-10-01','2024-06-28','CDI',3,6,'Rabat'),
+('EMP030','Chaimae','Berrichi','Femme','1999-12-02','2025-06-02',NULL,'CDD',5,8,'Rabat');
+GO
+
+/* =========================
+   4. GENERATION DES FAITS
+   ========================= */
+
+/* Snapshot mensuel : fin de mois, collaborateurs présents à cette date */
+INSERT INTO dbo.FactEmployeeSnapshot
+(SnapshotDateKey, EmployeeKey, DepartmentKey, JobKey, Headcount, MonthlySalary)
+SELECT
+    d.DateKey,
+    e.EmployeeKey,
+    e.DepartmentKey,
+    e.JobKey,
+    1,
+    CAST(6500 + (e.EmployeeKey * 317 % 9500) AS DECIMAL(12,2))
+FROM dbo.DimDate d
+CROSS JOIN dbo.DimEmployee e
+WHERE d.FullDate = EOMONTH(d.FullDate)
+  AND d.FullDate BETWEEN '2024-01-31' AND '2025-12-31'
+  AND e.HireDate <= d.FullDate
+  AND (e.ExitDate IS NULL OR e.ExitDate > d.FullDate);
+
+/* Absences : génération déterministe de 180 événements fictifs */
+;WITH N AS (
+    SELECT TOP (180) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS n
+    FROM sys.all_objects a CROSS JOIN sys.all_objects b
+)
+INSERT INTO dbo.FactAbsence
+(DateKey, EmployeeKey, DepartmentKey, AbsenceTypeKey, AbsenceDays, WorkingDays)
+SELECT
+    CONVERT(int,CONVERT(char(8),DATEADD(day, (n*13)%700, CONVERT(date,'2024-01-01')),112)),
+    e.EmployeeKey,
+    e.DepartmentKey,
+    ((n-1)%4)+1,
+    CAST(CASE WHEN n%5=0 THEN 3.00 WHEN n%3=0 THEN 2.00 ELSE 1.00 END AS DECIMAL(5,2)),
+    CAST(20.00 AS DECIMAL(5,2))
+FROM N
+JOIN dbo.DimEmployee e ON e.EmployeeKey = ((n-1)%30)+1
+WHERE DATEADD(day, (n*13)%700, CONVERT(date,'2024-01-01')) >= e.HireDate
+  AND (e.ExitDate IS NULL OR DATEADD(day, (n*13)%700, CONVERT(date,'2024-01-01')) <= e.ExitDate);
+
+/* Candidatures : 100 lignes, statuts variés */
+;WITH N AS (
+    SELECT TOP (100) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS n
+    FROM sys.all_objects a CROSS JOIN sys.all_objects b
+)
+INSERT INTO dbo.FactRecruitment
+(CandidateID, OpeningDateKey, HiringDateKey, DepartmentKey, JobKey,
+ RecruitmentSourceKey, RecruitmentStatus, RecruitmentCost, TimeToHireDays)
+SELECT
+    CONCAT('CAND',RIGHT(CONCAT('000',n),3)),
+    CONVERT(int,CONVERT(char(8),op.OpeningDate,112)),
+    CASE WHEN n%4<>0
+         THEN CONVERT(int,CONVERT(char(8),DATEADD(day,20+(n%35),op.OpeningDate),112))
+         ELSE NULL END,
+    ((n-1)%5)+1,
+    ((n-1)%8)+1,
+    ((n-1)%5)+1,
+    CASE WHEN n%4=0 THEN 'In Progress'
+         WHEN n%3=0 THEN 'Rejected'
+         ELSE 'Hired' END,
+    CAST(800 + (n*173%4200) AS DECIMAL(12,2)),
+    CASE WHEN n%4<>0 THEN 20+(n%35) ELSE NULL END
+FROM N
+CROSS APPLY (SELECT DATEADD(day,(n*7)%690,CONVERT(date,'2024-01-01')) AS OpeningDate) op
+WHERE DATEADD(day,20+(n%35),op.OpeningDate) <= '2025-12-31'
+   OR n%4=0;
+
+/* Formations : 120 participations */
+;WITH N AS (
+    SELECT TOP (120) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS n
+    FROM sys.all_objects a CROSS JOIN sys.all_objects b
+)
+INSERT INTO dbo.FactTraining
+(DateKey, EmployeeKey, DepartmentKey, TrainingName, TrainingHours, TrainingCost, TrainingMode)
+SELECT
+    CONVERT(int,CONVERT(char(8),DATEADD(day,(n*11)%700,CONVERT(date,'2024-01-01')),112)),
+    e.EmployeeKey,
+    e.DepartmentKey,
+    CASE n%4 WHEN 0 THEN 'Excel avancé' WHEN 1 THEN 'Power BI'
+             WHEN 2 THEN 'Communication' ELSE 'Cybersécurité' END,
+    CAST(CASE WHEN n%3=0 THEN 14 ELSE 7 END AS DECIMAL(6,2)),
+    CAST(500+(n*97%1800) AS DECIMAL(12,2)),
+    CASE WHEN n%2=0 THEN 'Présentiel' ELSE 'En ligne' END
+FROM N
+JOIN dbo.DimEmployee e ON e.EmployeeKey = ((n-1)%30)+1
+WHERE DATEADD(day,(n*11)%700,CONVERT(date,'2024-01-01')) >= e.HireDate
+  AND (e.ExitDate IS NULL OR DATEADD(day,(n*11)%700,CONVERT(date,'2024-01-01')) <= e.ExitDate);
+GO
+
+/* =========================
+   5. INDEXES ET CONTROLES
+   ========================= */
+CREATE INDEX IX_FES_Date_Department ON dbo.FactEmployeeSnapshot(SnapshotDateKey, DepartmentKey);
+CREATE INDEX IX_FA_Date_Department ON dbo.FactAbsence(DateKey, DepartmentKey);
+CREATE INDEX IX_FR_OpeningDate ON dbo.FactRecruitment(OpeningDateKey);
+CREATE INDEX IX_FT_Date_Department ON dbo.FactTraining(DateKey, DepartmentKey);
+GO
+
+/* Vérifier les volumes chargés */
+SELECT 'DimEmployee' AS TableName, COUNT(*) AS RowCount FROM dbo.DimEmployee
+UNION ALL SELECT 'DimDate', COUNT(*) FROM dbo.DimDate
+UNION ALL SELECT 'FactEmployeeSnapshot', COUNT(*) FROM dbo.FactEmployeeSnapshot
+UNION ALL SELECT 'FactAbsence', COUNT(*) FROM dbo.FactAbsence
+UNION ALL SELECT 'FactRecruitment', COUNT(*) FROM dbo.FactRecruitment
+UNION ALL SELECT 'FactTraining', COUNT(*) FROM dbo.FactTraining;
+GO
+
+/* =========================
+   6. REQUETES SQL D'ENTRAINEMENT
+   ========================= */
+
+-- A. Effectif par département au dernier snapshot disponible
+WITH LastSnapshot AS (
+    SELECT MAX(SnapshotDateKey) AS DateKey
+    FROM dbo.FactEmployeeSnapshot
+)
+SELECT dep.DepartmentName, SUM(f.Headcount) AS Headcount
+FROM dbo.FactEmployeeSnapshot f
+JOIN dbo.DimDepartment dep ON dep.DepartmentKey = f.DepartmentKey
+JOIN LastSnapshot ls ON ls.DateKey = f.SnapshotDateKey
+GROUP BY dep.DepartmentName
+ORDER BY Headcount DESC;
+
+-- B. Nombre de jours d'absence par département et par type
+SELECT dep.DepartmentName, at.AbsenceTypeName,
+       SUM(f.AbsenceDays) AS TotalAbsenceDays
+FROM dbo.FactAbsence f
+JOIN dbo.DimDepartment dep ON dep.DepartmentKey = f.DepartmentKey
+JOIN dbo.DimAbsenceType at ON at.AbsenceTypeKey = f.AbsenceTypeKey
+GROUP BY dep.DepartmentName, at.AbsenceTypeName
+ORDER BY TotalAbsenceDays DESC;
+
+-- C. Délai moyen de recrutement pour les candidatures embauchées
+SELECT dep.DepartmentName,
+       AVG(CAST(f.TimeToHireDays AS DECIMAL(10,2))) AS AvgTimeToHire
+FROM dbo.FactRecruitment f
+JOIN dbo.DimDepartment dep ON dep.DepartmentKey = f.DepartmentKey
+WHERE f.RecruitmentStatus = 'Hired'
+GROUP BY dep.DepartmentName
+ORDER BY AvgTimeToHire DESC;
+
+-- D. Coût total des formations par département
+SELECT dep.DepartmentName, SUM(f.TrainingCost) AS TotalTrainingCost,
+       SUM(f.TrainingHours) AS TotalTrainingHours
+FROM dbo.FactTraining f
+JOIN dbo.DimDepartment dep ON dep.DepartmentKey = f.DepartmentKey
+GROUP BY dep.DepartmentName
+ORDER BY TotalTrainingCost DESC;
+GO
