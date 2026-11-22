@@ -55,7 +55,7 @@ Choix de méthode à connaître : l'absentéisme se calcule sur « effectif moye
 ```
 sql/          Contrôles qualité, vues, requêtes analytiques avancées
 dax/          Mesures du modèle et bibliothèque DAX avancée
-docs/         Audit de qualité, documentation du modèle
+docs/         Documentation du modèle
 screenshots/  Captures du rapport
 theme/        Thème Power BI (JSON)
 
