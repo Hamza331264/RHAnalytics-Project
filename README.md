@@ -1,28 +1,64 @@
-# HR Analytics Dashboard
+# People Analytics : tableau de bord RH de bout en bout (SQL Server → Power BI)
 
-**Pilotage des effectifs, de l’absentéisme et du recrutement**
+## Objectif
 
-Entrepôt de données RH sous SQL Server et tableau de bord Power BI pour **Contosso**, entreprise de services informatiques.
+Partir d'un entrepôt de données RH (`HRAnalyticsDW`), l'auditer sans le modifier, fiabiliser le modèle sémantique, puis produire un rapport de pilotage pour une direction RH. Questions auxquelles le rapport répond :
 
+- Combien de salariés, comment évolue l'effectif, quel est le turnover ?
+- Où et quand l'absentéisme est-il le plus élevé, et quel effort de formation est consenti ?
+- Quelles sources de recrutement convertissent le mieux, et à quel coût ?
 
----
-## Aperçu
+## Aperçu du rapport
 
-| Élément | Détail |
+Rapport de 4 pages, thème personnalisé (`theme/HR_Analytics_Theme.json`) et filtres synchronisés (Année, Département, Genre, Niveau de poste, Type de contrat, selon la pertinence de chaque page).
+
+## Stack technique
+
+| Couche | Outils |
 |---|---|
-| Base de données | `HRAnalyticsDW` (SQL Server) |
-| Restitution | Power BI Desktop, 3 pages |
-## Contenu du dépôt
+| Stockage | SQL Server, base `HRAnalyticsDW`, schéma `dbo` |
+| Transformation | T-SQL : vues, CTE, fonctions de fenêtre |
+| Modélisation | Power BI Desktop, modèle en étoile autour de l'employé |
+| Calcul | DAX : 33 mesures et une bibliothèque avancée |
+| Restitution | Rapport Power BI de 4 pages |
 
-```text
-.
-├── sql/
-│   └── DB_HRproject.sql          # Création de la base, données fictives, index, requêtes
-├── powerbi/
-│   └── HR_Analytics.pbix         # Rapport Power BI (4 pages)
-├── docs/
-│   └── Guide_Projet_HR_Analytics.docx
-└── README.md
+## Modèle de données
+
+10 tables : 6 dimensions (`DimDate`, `DimEmployee`, `DimDepartment`, `DimJob`, `DimRecruitmentSource`, `DimAbsenceType`) et 4 faits (`FactEmployeeSnapshot`, `FactAbsence`, `FactRecruitment`, `FactTraining`).
+
+Corrections apportées après l'audit (détail dans [`docs/model.md`](docs/model.md)) :
+
+- suppression de 4 relations redondantes qui créaient des chemins de filtre ambigus ;
+- 3 relations de date un-à-un bidirectionnelles remplacées par du plusieurs-à-un en sens unique ;
+- activation des relations vers `DimEmployee` et `DimDepartment` ;
+- `DimDate` marquée comme table de dates, tri chronologique des mois ;
+- date d'ouverture des postes : relation inactive activée par `USERELATIONSHIP`.
+
+## Indicateurs clés
+
+Les 33 mesures sont dans [`dax/measures.dax`](dax/measures.dax), regroupées en 5 dossiers.
+
+| Thème | Exemples |
+|---|---|
+| Effectifs | Effectif (snapshot de fin de période), effectif moyen, variation vs N-1, départs, taux de turnover, masse salariale, ancienneté moyenne |
+| Absences | Jours d'absence, taux d'absentéisme, % maladie, durée moyenne |
+| Recrutement | Candidatures, taux de conversion, délai moyen, coût par recrutement |
+| Formation | Heures, coût, salariés formés, taux de participation, % en ligne |
+| Qualité | Part des absences datées un week-end |
+
+Choix de méthode à connaître : l'absentéisme se calcule sur « effectif moyen × jours ouvrés du calendrier » car la colonne `WorkingDays` est constante ; les mesures de recrutement utilisent la date d'ouverture du poste pour rester comparables entre elles.
+
+
+
+## Structure du dépôt
+
+```
+sql/          Contrôles qualité, vues, requêtes analytiques avancées
+dax/          Mesures du modèle et bibliothèque DAX avancée
+docs/         Audit de qualité, documentation du modèle
+screenshots/  Captures du rapport
+theme/        Thème Power BI (JSON)
+
 ```
 
 
@@ -30,21 +66,7 @@ Entrepôt de données RH sous SQL Server et tableau de bord Power BI pour **Cont
 
 
 
-**Connecter Power BI** : *Obtenir les données > SQL Server*, saisir le serveur et la base `HRAnalyticsDW`, mode Import, cocher les 10 tables.
-**Configurer le modèle** : relations un-à-plusieurs, `DimDate` marquée comme table de dates.
-Le détail pas à pas est dans le [guide du projet](docs/Guide_Projet_HR_Analytics.docx).
 
-## Indicateurs clés
 
-| KPI | Description |
-|---|---|
-| Effectif | Nombre total de collaborateurs dans l’entreprise. |
-| Taux de rotation | Pourcentage de collaborateurs ayant quitté l’entreprise. |
-| Taux d’absentéisme | Pourcentage d’absences des collaborateurs. |
-| Délai de recrutement | Durée moyenne nécessaire pour recruter un candidat. |
-| Coût par embauche | Coût moyen nécessaire pour recruter un nouveau collaborateur. |
-| Taux de conversion | Pourcentage de candidats passant d’une étape à une autre du processus de recrutement. |
-
-Les autres mesures sont décrites dans le guide du projet.
 
 
