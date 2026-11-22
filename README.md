@@ -36,14 +36,14 @@ Le détail pas à pas est dans le [guide du projet](docs/Guide_Projet_HR_Analyti
 
 ## Indicateurs clés
 
-| KPI | Définition |
+| KPI |
 |---|---|
-| Effectif | Collaborateurs présents au dernier snapshot de la période |
-| Taux de rotation | Départs ÷ effectif moyen |
+| Effectif |
+| Taux de rotation |
 | Taux d’absentéisme |
 | Délai de recrutement |
-| Coût par embauche | Coût total de recrutement ÷ recrutements réalisés |
-| Taux de conversion | Recrutements réalisés ÷ candidatures |
+| Coût par embauche |
+| Taux de conversion |
 
 Les autres mesures sont décrites dans le guide du projet.
 
