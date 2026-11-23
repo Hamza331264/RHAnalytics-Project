@@ -17,7 +17,6 @@ Rapport de 4 pages, thème personnalisé (`theme/HR_Analytics_Theme.json`) et fi
 | Couche | Outils |
 |---|---|
 | Stockage | SQL Server, base `HRAnalyticsDW`, schéma `dbo` |
-| Transformation | T-SQL : vues, CTE, fonctions de fenêtre |
 | Modélisation | Power BI Desktop, modèle en étoile autour de l'employé |
 | Calcul | DAX : 33 mesures et une bibliothèque avancée |
 | Restitution | Rapport Power BI de 4 pages |
@@ -54,7 +53,7 @@ Choix de méthode à connaître : l'absentéisme se calcule sur « effectif moye
 
 ```
 sql/          Contrôles qualité, vues, requêtes analytiques avancées
-dax/          Mesures du modèle et bibliothèque DAX avancée
+dax/          Mesures du modèle et bibliothèque DAX
 docs/         Documentation du modèle
 screenshots/  Captures du rapport
 theme/        Thème Power BI (JSON)
